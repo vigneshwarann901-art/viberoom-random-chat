@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: viberoom
+    name: viberoom-v2
     runtime: node
     plan: free
     buildCommand: npm install --include=dev && npm run check && npm run build && npm test
@@ -9,5 +9,11 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
       - key: STUN_URLS
         value: stun:stun.l.google.com:19302,stun:stun1.l.google.com:19302
+      - key: ENABLE_CREDIT_ENFORCEMENT
+        value: "false"
