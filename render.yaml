@@ -3,7 +3,7 @@ services:
     name: viberoom
     runtime: node
     plan: free
-    buildCommand: npm install && npm run check && npm run build && npm test
+    buildCommand: npm install --include=dev && npm run check && npm run build && npm test
     startCommand: npm start
     healthCheckPath: /health
     envVars:
