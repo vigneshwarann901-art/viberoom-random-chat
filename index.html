@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>VibeRoom — Spontaneous WebRTC Video Chat</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+  </head>
+  <body class="bg-neutral-950 text-neutral-100 antialiased selection:bg-fuchsia-500 selection:text-white">
+    <div id="root"></div>
+    <script type="module">
+      import React from 'react';
+      import { createRoot } from 'react-dom/client';
+      import App from './VibeRoom.jsx';
+
+      const container = document.getElementById('root');
+      const root = createRoot(container);
+      root.render(React.createElement(App));
+    </script>
+  </body>
+</html>
