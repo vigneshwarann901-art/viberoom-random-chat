@@ -266,6 +266,14 @@ async function runTests() {
     // ------------------------------------------------------------------
     // Test 7: Persistent Blocklist, Private Reporting & Disconnect Cleanup
     // ------------------------------------------------------------------
+    const crossSessionReportRes = await fetch(`${baseUrl}/api/report`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${alice.token}` },
+      body: JSON.stringify({ sessionId: matchAlice.sessionId, reportedUserId: matchCarla.partnerId, reason: 'harassment' })
+    });
+    assert.strictEqual(crossSessionReportRes.status, 403, 'Cross-session reports must be rejected');
+    console.log('✔ Test 7a: Cross-session report spoofing rejected.');
+
     const reportRes = await fetch(`${baseUrl}/api/report`, {
       method: 'POST',
       headers: {

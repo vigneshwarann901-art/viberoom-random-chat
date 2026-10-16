@@ -1162,6 +1162,18 @@ function createVibeRoomServer(options = {}) {
       }
       try {
         const payload = await readJsonBody(req);
+        const session = activeSessions.get(payload.sessionId);
+        if (!session || (session.userA !== verified.id && session.userB !== verified.id)) {
+          res.writeHead(403, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'A report must reference your active session.' }));
+          return;
+        }
+        const expectedId = session.userA === verified.id ? session.userB : session.userA;
+        if (payload.reportedUserId !== expectedId) {
+          res.writeHead(403, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'You can only report your current partner.' }));
+          return;
+        }
         const result = await dataAdapter.createSafetyReport({
           sessionId: payload.sessionId,
           reporterId: verified.id,
