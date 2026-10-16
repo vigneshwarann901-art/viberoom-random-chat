@@ -1,111 +1,76 @@
-# VibeRoom — Real-Time Random WebRTC Video Chat
+# VibeRoom 2.0 — Accounts, Profiles & Gender-Preference Matching
 
-VibeRoom is a full-stack, peer-to-peer random video-chat MVP built with React, WebRTC, a Node.js HTTP server, and the `ws` WebSocket library. Its server performs authoritative matchmaking and forwards session-scoped WebRTC signaling and chat messages.
+VibeRoom is a full-stack random video-chat MVP built with React, WebRTC, a Node.js HTTP/WebSocket server, and Supabase Auth/PostgreSQL. It includes ordinary random matching, optional mutual gender-preference matching, profiles, blocking/reporting, and a scaffold for future credit-based entitlements (disabled by default).
 
-## Features
+## Important status
 
-- Responsive dark interface with age self-confirmation, interest tags, video preview, microphone/camera toggles, next-partner flow, text chat, reporting and local blocklist.
-- Real WebRTC media using `getUserMedia()` and `RTCPeerConnection`.
-- Server-managed FIFO/interest-prioritized matchmaking across connected browsers/devices.
-- Server-issued user/session IDs and validation of WebRTC signaling/chat against the active session.
-- ICE candidate buffering in the frontend.
-- `/health`, `/api/ice-config`, and authenticated `/api/report` endpoints.
-- Automated integration tests for health, ICE config, matchmaking, signaling, chat, stale-session rejection, cleanup, and report validation.
-
-**Important:** This is an MVP, not a fully moderated or audited production service. Automated tests do not replace end-to-end media testing. TURN is often required for reliable calls across mobile carrier networks, symmetric NATs, and restrictive firewalls. The 18+ checkbox is self-attestation, not age verification. Report storage is in memory and is lost on restart. Do not rely on this deployment for long-term moderation records.
+- The app can run in a local in-memory fallback mode when Supabase environment variables are absent. This is for local testing only: those users, tokens, profiles, block lists and ledger entries are lost when the server restarts and do not work across multiple instances.
+- For a persistent deployment, configure a real Supabase project and run the SQL migration below before exposing registration to users.
+- Do not add actual API keys or `.env` to Git. Use Render environment variables.
+- The 18+ checkbox is self-declaration, not identity or age verification.
+- The matching/credit entitlement scaffold does not implement payments or charge credits. Keep `ENABLE_CREDIT_ENFORCEMENT=false` unless the credit service has been fully implemented and reviewed.
+- In-memory matchmaking only supports a single running server process. Horizontal scaling needs a shared queue/pub-sub system.
+- Reports are stored in Supabase when configured; report retention/cleanup should be implemented as a scheduled database job if retaining production reports for exactly 90 days is a requirement.
+- WebRTC uses STUN by default. A TURN relay is often necessary across strict NATs, enterprise networks, and some mobile carriers.
 
 ## Requirements
 
-- Node.js 20 or newer
+- Node.js 20+
 - npm
-- Browser with camera/microphone support
+- Supabase project for persistent production authentication/profile storage
 
-## Run locally on CachyOS/Linux
-
-From the project root:
+## Local setup on CachyOS/Linux
 
 ```bash
 cp .env.example .env
-npm install
+# Edit .env and fill SUPABASE_URL + SUPABASE_ANON_KEY, or leave blank for disposable local test mode.
+npm install --include=dev
 npm run check
 npm test
 npm run build
 npm start
 ```
 
-Open `http://localhost:8080`. `localhost` is a secure context for camera/microphone access in modern browsers.
+Open http://localhost:8080. Modern browsers allow camera/microphone access on `localhost`. For development mode, run `npm run dev` and open http://localhost:5173; Vite proxies `/api`, `/health`, and `/ws` to the backend on port 8080.
 
-### Development mode
+## Supabase setup
 
-```bash
-npm install
-npm run dev
-```
+1. Create a project at https://supabase.com/.
+2. Open **SQL Editor** and execute `supabase/migrations/001_initial_schema.sql`.
+3. In Supabase Auth settings, configure the site's URL and allowed redirect URLs for the Render domain and your localhost development URL.
+4. In Render Environment settings, set `SUPABASE_URL` and `SUPABASE_ANON_KEY` (the publishable/anon key, not a service-role key).
+5. `SUPABASE_SERVICE_ROLE_KEY` is optional; the included SQL RPC supports self-service deletion without it. If you do set it, keep it server-only and never expose it to Vite/frontend code.
+6. For Google sign-in, enable the Google provider in Supabase Auth and configure its credentials, Site URL, and allowed redirect URLs. The current frontend handles the implicit-flow token-fragment callback; test Google sign-in end-to-end before launch. For stronger OAuth hardening, replace the custom redirect handling with Supabase JS PKCE flow.
+7. Test signup, email confirmation (if enabled), login, profile update, logout, password reset, OAuth, and account deletion before inviting users.
 
-Vite runs on port `5173`; the signaling/HTTP server runs on port `8080`. The Vite config proxies `/ws`, `/api`, and `/health` to the backend. You can also run `npm run client:dev` and `npm run server:dev` in separate terminals.
+The schema uses RLS policies. Review the migration against your intended public data model before applying to an existing production database.
 
-## Test with two users
+## Render deployment
 
-1. Start the app on HTTPS or `localhost`.
-2. Open two independent browser profiles or two devices and visit the same public HTTPS URL.
-3. Allow camera/microphone permissions and confirm the adult-use checkbox on each browser.
-4. Click **Enter Room & Start Chat** in both sessions.
-5. Test audio/video, text messaging, skip/next, leave, and report behavior.
+1. Push the full project to GitHub.
+2. In Render, select **New → Blueprint** and connect the repository containing `render.yaml`.
+3. Add the Supabase environment values when prompted or in the service's Environment tab.
+4. The build command installs dev dependencies, runs the server syntax check, builds Vite, and runs the integration suite.
+5. After deploy, check `https://YOUR-RENDER-HOST/health` and test with two independent user accounts and devices.
+6. Set TURN variables in Render for better network traversal.
 
-A test with two tabs is helpful for initial signaling validation, but cross-device/network tests are necessary before public launch. Only one browser session per peer ID is assumed; each WebSocket connection gets a fresh server-generated identity.
+The Blueprint's free plan may have sleeping/availability constraints. Verify current Render plan limitations before launching publicly.
 
-## STUN and TURN
+## Key endpoints
 
-By default, VibeRoom uses public Google STUN URLs for ICE address discovery. STUN alone does not guarantee connectivity on all networks. For production, provision a TURN service and set its credentials as environment variables on your hosting provider:
+- `GET /health` — status and service counts (avoid exposing this publicly with sensitive user data in future revisions).
+- `GET /api/ice-config` — STUN/TURN settings.
+- `POST /api/auth/signup`, `/api/auth/login`, `/api/auth/refresh`, `/api/auth/reset-password`, `/api/auth/oauth-url`, `/api/auth/logout` — auth.
+- `GET/PUT /api/profile` — current user's profile and preferences.
+- `POST /api/block` — persistent blocking.
+- `POST /api/report` — session-authenticated reporting.
+- `DELETE /api/account` — account deletion.
+- WebSocket `/ws` — authenticate, queueing, server-scoped signaling, messaging and sessions.
 
-```text
-STUN_URLS=stun:stun.l.google.com:19302,stun:stun1.l.google.com:19302
-TURN_URL=turn:turn.example.com:3478,turns:turn.example.com:5349
-TURN_USERNAME=your-turn-username
-TURN_CREDENTIAL=your-turn-secret
-```
+## Tests
 
-The example values above are illustrative only. Never commit actual TURN credentials. The `/api/ice-config` endpoint returns configured ICE server settings to clients; use short-lived TURN credentials from your provider where supported.
+`npm test` uses the local in-memory adapter and validates guest rejection, signup/login, profile privilege-field spoofing, mutual gender matching, random matching, blocklists, signal/message session isolation, report validation and account deletion. Passing those tests does not verify Supabase RLS remotely, OAuth setup, or real media connectivity. Test the latter manually using two browsers/devices.
 
-## Deploy on Render
+## Environment variables
 
-1. Push this project to a GitHub repository.
-2. In Render, select **New → Blueprint** and choose the repository.
-3. Render reads `render.yaml`, runs dependency install, checks, build and tests, then starts `node server.js`.
-4. Add TURN configuration under the Render service's Environment settings for better real-world connection success.
-5. Confirm `/health` returns status `UP`, then test the app from two separate networks.
-
-The included blueprint uses Render's free web-service plan, which may sleep or have resource limitations. Hosting policies/pricing may change. A WebSocket-capable service is required. The app serves its frontend and WebSocket backend from the same origin in production.
-
-## API endpoints
-
-- `GET /health` — process health and aggregate service counts.
-- `GET /api/ice-config` — public ICE server configuration (do not place long-lived secrets here; TURN credential handling should use provider-managed short-lived credentials where supported).
-- `POST /api/report` — accepts reports only when sent with the per-WebSocket `X-VibeRoom-Report-Token` and while the reporter is in the referenced active session. The server verifies the reported user is the reporter's current partner.
-- WebSocket `/ws` — `join_queue`, `next_partner`, `leave_session`, `signal`, `chat_message`, and `report` events.
-
-## Project files
-
-- `VibeRoom.jsx` — React UI, WebRTC lifecycle, signaling client, chat, reports.
-- `server.js` — HTTP API, WebSocket signaling, matchmaking, report buffer, static frontend delivery.
-- `test.js` — automated integration suite.
-- `index.html` — Vite entry page.
-- `vite.config.cjs` — local development proxy configuration.
-- `render.yaml` — Render Blueprint.
-- `.env.example` — safe configuration template.
-
-## Known limitations before production
-
-- Reports reside in a bounded in-memory buffer and are not durable or connected to a protected moderator dashboard.
-- No verified age assurance, user account system, advanced abuse detection, or persistent block list is provided.
-- A simple in-memory matchmaking queue supports a single server process only. Horizontal scaling needs a shared queue/pub-sub system.
-- TURN connectivity must be configured and manually tested for restrictive networks.
-- Cross-browser/cross-device video and audio behavior, production load, rate limits for connection attempts, and abuse response processes require additional validation.
-- Video/audio is not recorded by the application, but peer-to-peer media networking has privacy implications; do not claim complete anonymity.
-
-## Security notes
-
-- Keep `.env` out of Git. Only commit `.env.example`.
-- Use environment-variable settings for TURN secrets and any future credentials.
-- Report submission uses a per-connection token plus active-session/partner validation; this reduces spoofing but is not a replacement for a larger moderation and identity design.
-- Deploy only after reviewing jurisdiction-appropriate legal, safety, privacy and moderation requirements.
+See `.env.example`. Never prefix server secrets with `VITE_` and never commit real credentials. `SUPABASE_SERVICE_ROLE_KEY` bypasses RLS and must remain only on the server.
